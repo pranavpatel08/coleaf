@@ -34,7 +34,8 @@ def test_merge():
 
 
 def test_unsafe_remote_paths():
-    for bad in [".claude/settings.json", "CLAUDE.md", "sub/AGENTS.md", ".latexmkrc", "../x.tex", "a/../../x", "/etc/x", "a\\b", ".git/hooks/post-checkout"]:
+    for bad in [".claude/settings.json", "CLAUDE.md", "sub/AGENTS.md", ".latexmkrc", "../x.tex", "a/../../x", "/etc/x", "a\\b", ".git/hooks/post-checkout", "claude.md", "Claude.Local.md", "latexmkrc",
+                "CLAUDE.md.", "CLAUDE.md ", "C:evil", "x/AGENT.md", "ＣＬＡＵＤＥ.md", "a/./b", ""]:
         assert unsafe(bad), bad
-    for good in ["main.tex", "sections/intro.tex", "figures/loss.pdf", "refs.bib"]:
+    for good in ["main.tex", "sections/intro.tex", "figures/loss.pdf", "refs.bib", "fig. 1.png", "notes.md", "claude-notes.tex"]:
         assert not unsafe(good), good

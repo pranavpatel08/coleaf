@@ -14,6 +14,7 @@ import os
 import re
 import sys
 import time
+import unicodedata
 from fnmatch import fnmatch
 from pathlib import Path
 
@@ -25,7 +26,8 @@ from merge3 import Merge3
 BASE = os.environ.get("OVERLEAF_URL", "https://www.overleaf.com").rstrip("/")
 HOME = Path(os.environ.get("OVERLAUDE_HOME", Path.home() / ".overlaude"))
 COOKIE_FILE = HOME / "cookie"
-AGENT_FILES = {"CLAUDE.md", "AGENTS.md", "GEMINI.md"}
+# Files that tools auto-load from the working directory; never pulled from Overleaf (compared case-insensitively).
+AGENT_FILES = {"CLAUDE.md", "CLAUDE.local.md", "AGENTS.md", "AGENT.md", "GEMINI.md", "latexmkrc"}
 # Never uploaded as new files (tracked remote files are always synced). Extend with .olignore.
 IGNORE = [".*", "*.aux", "*.log", "*.out", "*.toc", "*.lof", "*.lot", "*.bbl", "*.blg", "*.bcf",
           "*.run.xml", "*.fls", "*.fdb_latexmk", "*.synctex.gz", "*.nav", "*.snm", "*.pyc",
@@ -35,8 +37,12 @@ CONFLICT = re.compile(r"^<<<<<<< local$", re.M)
 
 def unsafe(rel):
     """Remote paths a collaborator could use to plant tool config (.claude/, .latexmkrc, ...) or escape the folder."""
-    parts = rel.split("/")
-    return "\\" in rel or any(p in ("", ".", "..") or p.startswith(".") or p in AGENT_FILES for p in parts)
+    agent = {a.casefold() for a in AGENT_FILES}
+    for p in rel.split("/"):
+        n = unicodedata.normalize("NFKC", p).casefold().rstrip(" .")  # how case-/dot-insensitive filesystems see it
+        if not n or n.startswith(".") or n in agent or p != p.rstrip(" .") or any(c in p for c in "\\:"):
+            return True
+    return False
 
 dmp = diff_match_patch()
 dmp.Match_Threshold = 0.0  # merge patches only onto exactly matching context, never fuzzily
@@ -258,7 +264,7 @@ def sync(root, allow_delete=False):
     first = not bdocs and not bfiles
     log = lambda tag, path: print(f"{tag:>9}  {path}")
     for table in (docs, files):
-        for rel in [r for r in table if unsafe(r)]:
+        for rel in [r for r in table if unsafe(r) or not (root / r).resolve().is_relative_to(root.resolve())]:
             del table[rel]
             log("SKIPPED", f"{rel} (dotfile, agent config, or unsafe path; never written locally)")
 
