@@ -33,6 +33,7 @@ IGNORE = [".*", "*.aux", "*.log", "*.out", "*.toc", "*.lof", "*.lot", "*.bbl", "
           "*.run.xml", "*.fls", "*.fdb_latexmk", "*.synctex.gz", "*.nav", "*.snm", "*.pyc",
           "__pycache__", "*.orig", *AGENT_FILES]
 CONFLICT = re.compile(r"^<<<<<<< local$", re.M)
+TOKEN = re.compile(r"\w+|\s+|[^\w\s]", re.S)
 
 
 def unsafe(rel):
@@ -60,8 +61,21 @@ def u16(s):
 
 def to_op(old, new):
     """ShareJS op turning `old` into `new`, as a minimal character diff."""
-    diffs = dmp.diff_main(old, new)
+    # diff whole words (each token mapped to one char), so history and suggestions read "encouraging -> strong"
+    vocab, words = {}, []
+    def encode(s):
+        out = []
+        for tok in TOKEN.findall(s):
+            if tok not in vocab:
+                vocab[tok] = chr(len(words) + (0x800 if len(words) >= 0xD800 else 0))  # skip surrogates
+                words.append(tok)
+            out.append(vocab[tok])
+        return "".join(out)
+    a, b = encode(old), encode(new)
+    decode = {c: w for w, c in vocab.items()}
+    diffs = dmp.diff_main(a, b, False)
     dmp.diff_cleanupSemantic(diffs)
+    diffs = [(kind, "".join(decode[c] for c in text)) for kind, text in diffs]
     op, p = [], 0
     for kind, text in diffs:
         if kind == 0:
@@ -86,6 +100,14 @@ def merge(base, local, remote):
             return text, False
     lines = Merge3((base or "").splitlines(True), local.splitlines(True), remote.splitlines(True))
     return "".join(lines.merge_lines("local", "overleaf")), True
+
+
+def unwire(s):
+    """Overleaf's realtime channel sends text as a byte-view (one UTF-8 byte per code unit)."""
+    try:
+        return s.encode("latin-1").decode("utf-8")
+    except UnicodeError:
+        return s
 
 
 def sha(path):
@@ -191,12 +213,16 @@ class Realtime:
                 self.events.append((a, b))
 
     def join(self, doc_id):
+        """-> (text, version, ranges); ranges holds the doc's comments and tracked changes."""
         ack = self.call("joinDoc", doc_id, {"encodeRanges": True})
-        # lines arrive as a byte-view (one UTF-8 byte per code unit)
-        return "\n".join(line.encode("latin-1").decode("utf-8") for line in ack[1]), ack[2]
+        ranges = next((x for x in ack[3:] if isinstance(x, dict)), {})
+        return "\n".join(unwire(line) for line in ack[1]), ack[2], ranges
 
-    def edit(self, doc_id, op, version):
-        self.call("applyOtUpdate", doc_id, {"doc": doc_id, "op": op, "v": version})
+    def edit(self, doc_id, op, version, suggest=False):
+        update = {"doc": doc_id, "op": op, "v": version}
+        if suggest:
+            update["meta"] = {"tc": os.urandom(9).hex()}  # record as a tracked change; server adds per-op ids
+        self.call("applyOtUpdate", doc_id, update)
         # the ack only means "queued"; an op-less otUpdateApplied means applied
         self.wait("otUpdateApplied", lambda a: a and a[0].get("doc") == doc_id and "op" not in a[0])
 
@@ -254,12 +280,18 @@ def write(path, data):
         path.write_bytes(data)
 
 
-def sync(root, allow_delete=False):
-    st = load(root)
-    pid, bdocs, bfiles = st["project"], st["docs"], st["files"]
+def connect(pid):
     s = session()
     csrf(s, f"/project/{pid}")
-    rt = Realtime(s, pid)
+    return s, Realtime(s, pid)
+
+
+def sync(root, allow_delete=False, suggest=False):
+    st = load(root)
+    pid, bdocs, bfiles = st["project"], st["docs"], st["files"]
+    s, rt = connect(pid)
+    if suggest and not rt.project.get("features", {}).get("trackChanges"):
+        die("this project has no track changes (an Overleaf premium feature); sync without --suggest")
     docs, files, folders = tree(rt.project)
     first = not bdocs and not bfiles
     log = lambda tag, path: print(f"{tag:>9}  {path}")
@@ -299,7 +331,7 @@ def sync(root, allow_delete=False):
 
     for rel, did in docs.items():
         p, base = root / rel, bdocs.get(rel)
-        remote, version = rt.join(did)
+        remote, version, _ = rt.join(did)
         if not p.exists() and base is not None:
             if remote == base:
                 remove_remote(rel, "doc", did)
@@ -323,8 +355,8 @@ def sync(root, allow_delete=False):
             log("CONFLICT", f"{rel}: overlapping edits marked with <<<<<<< local / >>>>>>> overleaf")
             continue
         if text != remote:
-            rt.edit(did, to_op(remote, text), version)
-            log("pushed", rel)
+            rt.edit(did, to_op(remote, text), version, suggest)
+            log("suggested" if suggest else "pushed", rel)
         elif remote != base:
             log("pulled", rel)
         if text != local:
@@ -376,6 +408,64 @@ def sync(root, allow_delete=False):
 
     save(root, st)
     rt.ws.close()
+
+
+# -- comments ------------------------------------------------------------------
+def find_threads(rt, docs):
+    """-> [(rel, doc_id, text, comment_range)] for every comment anchored in the project."""
+    out = []
+    for rel, did in docs.items():
+        text, _, ranges = rt.join(did)
+        out += [(rel, did, text, c) for c in ranges.get("comments", [])]
+    return out
+
+
+def comments(root, show_all):
+    pid = load(root)["project"]
+    s, rt = connect(pid)
+    threads = ok(s.get(f"{BASE}/project/{pid}/threads")).json()
+    shown = 0
+    for rel, _, text, c in find_threads(rt, tree(rt.project)[0]):
+        tid, th = c["op"]["t"], threads.get(c["op"]["t"], {})
+        if th.get("resolved") and not show_all:
+            continue
+        i = len(text.encode("utf-16-le")[:2 * c["op"]["p"]].decode("utf-16-le", "ignore"))  # UTF-16 offset -> index
+        print(f"[{tid}] {rel}:{text.count(chr(10), 0, i) + 1}{'  (resolved)' if th.get('resolved') else ''}")
+        print(f"  on: {unwire(c['op']['c'])[:200]!r}")
+        for m in th.get("messages", []):
+            who = (m.get("user") or {}).get("first_name") or (m.get("user") or {}).get("email", "?")
+            print(f"  {who}: {m.get('content', '')}")
+        shown += 1
+    if not shown:
+        print("no open comments" if not show_all else "no comments")
+
+
+def add_comment(root, rel, anchor, message):
+    pid = load(root)["project"]
+    s, rt = connect(pid)
+    did = tree(rt.project)[0].get(rel) or die(f"no document {rel} on Overleaf")
+    text, version, _ = rt.join(did)
+    if text.count(anchor) != 1:
+        die(f"the text to comment on must appear exactly once in {rel} (found {text.count(anchor)}); include more context")
+    tid = os.urandom(12).hex()
+    # message first: an anchor without a thread would show as an empty comment
+    ok(s.post(f"{BASE}/project/{pid}/thread/{tid}/messages", json={"content": message}))
+    rt.edit(did, [{"p": u16(text[:text.index(anchor)]), "c": anchor, "t": tid}], version)
+    print(f"[{tid}] commented on {rel}")
+
+
+def thread_action(root, tid, reply=None):
+    pid = load(root)["project"]
+    s, rt = connect(pid)
+    if reply:
+        ok(s.post(f"{BASE}/project/{pid}/thread/{tid}/messages", json={"content": reply}))
+        print(f"[{tid}] replied")
+        return
+    did = next((did for _, did, _, c in find_threads(rt, tree(rt.project)[0]) if c["op"]["t"] == tid), None)
+    if not did:
+        die(f"no comment {tid} in this project")
+    ok(s.post(f"{BASE}/project/{pid}/doc/{did}/thread/{tid}/resolve", json={}))
+    print(f"[{tid}] resolved")
 
 
 # -- compile --------------------------------------------------------------------
@@ -430,7 +520,18 @@ def main():
     c = sub.add_parser("clone", help="copy a project into a new local folder")
     c.add_argument("project", help="project name, id, or URL")
     c.add_argument("dir", nargs="?")
-    sub.add_parser("sync", help="merge local and Overleaf changes both ways").add_argument("--delete", action="store_true", help="also delete files on Overleaf that you deleted locally")
+    sy = sub.add_parser("sync", help="merge local and Overleaf changes both ways")
+    sy.add_argument("--delete", action="store_true", help="also delete files on Overleaf that you deleted locally")
+    sy.add_argument("--suggest", action="store_true", help="push your edits as tracked changes for collaborators to accept or reject")
+    sub.add_parser("comments", help="list open comments").add_argument("--all", action="store_true", help="include resolved ones")
+    cm = sub.add_parser("comment", help="comment on a piece of text")
+    cm.add_argument("file")
+    cm.add_argument("text", help="the exact text to attach the comment to (must be unique in the file)")
+    cm.add_argument("message")
+    rp = sub.add_parser("reply", help="reply to a comment thread")
+    rp.add_argument("thread")
+    rp.add_argument("message")
+    sub.add_parser("resolve", help="resolve a comment thread").add_argument("thread")
     sub.add_parser("compile", help="compile on Overleaf; save PDF and log to .ol/")
     a = ap.parse_args()
 
@@ -450,7 +551,15 @@ def main():
         sync(root)
         print(f"cloned into {root}/")
     elif a.cmd == "sync":
-        sync(find_root(), a.delete)
+        sync(find_root(), a.delete, a.suggest)
+    elif a.cmd == "comments":
+        comments(find_root(), a.all)
+    elif a.cmd == "comment":
+        add_comment(find_root(), a.file, a.text, a.message)
+    elif a.cmd == "reply":
+        thread_action(find_root(), a.thread, a.message)
+    elif a.cmd == "resolve":
+        thread_action(find_root(), a.thread)
     elif a.cmd == "compile":
         compile_(find_root())
 

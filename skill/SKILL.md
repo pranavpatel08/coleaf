@@ -14,5 +14,7 @@ The folder is a live two-way mirror of an Overleaf project. Edit files with your
 5. **Compile:** `ol sync && ol compile`. It prints errors with line numbers (`l.123`). The full log is `.ol/output.log`; the PDF is `.ol/output.pdf` (Read it to check figures and layout).
 6. **Figures:** save generated plots (e.g. `figures/loss.pdf`) inside the folder; `ol sync` uploads them.
 7. Deleting a file locally does not delete it on Overleaf unless the user asks: `ol sync --delete`.
+8. **Suggestions:** when the user wants co-authors to review your edits, or says "suggest", use `ol sync --suggest` so edits arrive as tracked changes.
+9. **Comments:** `ol comments` lists open threads (`[thread-id] file:line`, the text they're on, and the messages). To address them: sync, make the edit, `ol sync`, then `ol reply <id> "<what changed>"` and `ol resolve <id>`. Only resolve threads you actually addressed. To flag something for co-authors: `ol comment <file> "<exact unique text>" "<message>"`.
 
 Never edit `.ol/`. If `ol` says the session expired, ask the user to run `! ol login`.

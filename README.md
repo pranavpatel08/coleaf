@@ -2,8 +2,10 @@
 
 Two-way sync between a local folder and an Overleaf project, made for working on papers with Claude Code.
 
-- **Your edits show up as real edits.** Changes go through Overleaf's live editing channel as minimal character edits, the same way typing in the editor does. History shows the words you changed, not "deleted file, uploaded file". Collaborators with the project open see them appear live.
+- **Your edits show up as real edits.** Changes go through Overleaf's live editing channel as minimal word-level edits, the same way typing in the editor does. History shows the words you changed, not "deleted file, uploaded file". Collaborators with the project open see them appear live.
 - **Collaborators' edits are merged in.** `ol sync` 3-way merges both sides and prints a diff of what others changed. Edits to different words on the same line merge cleanly. Truly overlapping edits get `<<<<<<< local / >>>>>>> overleaf` markers, and that file is not pushed until the markers are resolved.
+- **Suggest instead of edit.** `ol sync --suggest` sends your edits as tracked changes that co-authors accept or reject (needs track changes on the project).
+- **Comments.** List, add, reply to, and resolve Overleaf comments, e.g. *"address every open comment, reply to each, and resolve it."*
 - **Works on free accounts.** No git integration or premium plan needed.
 - **Claude uses its normal tools.** It's just a folder: Read, Edit, Grep, local scripts for plots. No MCP tool schemas taking up context.
 
@@ -14,14 +16,22 @@ ol projects
 ol clone "My Paper"              # -> ./My-Paper/
 cd My-Paper
 ol sync                          # run before and after editing
+ol sync --suggest                # same, but your edits arrive as tracked changes
 ol compile                       # compiles on Overleaf; PDF + log land in .ol/
+
+ol comments [--all]              # open comments, with file:line and the text they're on
+ol comment main.tex "exact text" "Is this claim supported?"
+ol reply <thread-id> "Added a citation."
+ol resolve <thread-id>
 ```
+
+**How sync works.** It's one pass, not a background process: connect, merge, disconnect, about 2 seconds. For each file it compares three versions: *base* (what both sides had at your last sync, kept in `.ol/`), *yours* (the local file) and *theirs* (Overleaf right now). If only one side changed, that side wins. If both changed, your edits are replayed on top of theirs. It never uploads a whole file over a collaborator's work; it sends small "insert this here / delete that there" edits against Overleaf's live text, and Overleaf merges them the same way it merges two people typing at once.
 
 | Situation | What `ol sync` does |
 |---|---|
 | You edited a doc | pushes the diff as live edits |
 | A collaborator edited it | merges into your file, prints the diff |
-| Both edited it | merges character-level; overlaps get conflict markers |
+| Both edited it | merges (even edits to different words of one line); real overlaps get conflict markers, and nothing is pushed until they're resolved |
 | You added a file (figure, .tex, .bib) | uploads it (creates folders as needed) |
 | You changed a figure | re-uploads it |
 | A collaborator added, changed, or deleted a file | mirrors it locally (unless you changed it) |
@@ -49,9 +59,13 @@ mkdir -p ~/.claude/skills/overleaf && curl -fsSL https://raw.githubusercontent.c
 
 Then in the project folder: *"sync, then tighten the related-work section and fix the compile errors"*.
 
+## Releasing
+
+Pushing a tag like `v0.2.0` (matching `version` in `pyproject.toml`) runs the tests and publishes to PyPI through [trusted publishing](https://docs.pypi.org/trusted-publishers/), so no token is stored anywhere. One-time setup on pypi.org → the project's *Publishing* settings: owner `pranavpatel08`, repo `overlaude`, workflow `ci.yml`, environment `pypi`.
+
 ## Limits
 
-- Comments and track changes aren't supported yet.
+- Tracked changes can be created but not accepted or rejected from `ol`; do that in Overleaf.
 - Renaming a file locally shows up on Overleaf as a new file, plus a deletion if you use `--delete`.
 - The cookie expires eventually; `ol login` again.
 - This uses Overleaf's private web protocol, which may change without notice.

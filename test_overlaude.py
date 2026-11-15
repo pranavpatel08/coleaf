@@ -16,7 +16,9 @@ def test_to_op():
                      ("\\section{Intro}\nfoo\nbar\n", "\\section{Introduction}\nbar\nbaz\n")]:
         assert apply(old, to_op(old, new)) == new
     assert to_op("same", "same") == []
-    assert to_op("a😀b", "a😀bc") == [{"p": 4, "i": "c"}]  # UTF-16 offsets, like the server
+    assert to_op("a 😀 b", "a 😀 b c") == [{"p": 6, "i": " c"}]  # UTF-16 offsets, like the server
+    # whole words, so tracked changes read naturally
+    assert to_op("Results are encouraging.", "Results are strong.") == [{"p": 12, "d": "encouraging"}, {"p": 12, "i": "strong"}]
 
 
 def test_merge():
