@@ -1,0 +1,23 @@
+[project]
+name = "overlaude"
+version = "0.1.0"
+description = "Two-way sync between a local folder and an Overleaf project, through Overleaf's live editing channel."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+dependencies = ["requests", "websocket-client", "diff-match-patch", "merge3"]
+keywords = ["overleaf", "latex", "sync", "claude"]
+
+[project.optional-dependencies]
+browser = ["browser-cookie3"]
+
+[project.scripts]
+ol = "overlaude:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.urls]
+Homepage = "https://github.com/pranavpatel08/overlaude"
+Issues = "https://github.com/pranavpatel08/overlaude/issues"
