@@ -102,6 +102,13 @@ def merge(base, local, remote):
     return "".join(lines.merge_lines("local", "overleaf")), True
 
 
+def clean(s, indent=""):
+    """Text from Overleaf as safe terminal output: no escape/control chars; newlines indented so
+    collaborator text can't pose as ol's own output lines."""
+    s = "".join(c for c in str(s) if c in "\n\t" or not unicodedata.category(c).startswith("C"))
+    return s.replace("\n", "\n" + indent)
+
+
 def unwire(s):
     """Overleaf's realtime channel sends text as a byte-view (one UTF-8 byte per code unit)."""
     try:
@@ -347,7 +354,7 @@ def sync(root, allow_delete=False, suggest=False):
             log("CONFLICT", f"{rel} still has <<<<<<< markers; resolve them, then sync again")
             continue
         if base is not None and remote != base and not first:
-            print("".join(difflib.unified_diff(base.splitlines(True), remote.splitlines(True), f"a/{rel}", f"b/{rel} (overleaf)")))
+            print(clean("".join(difflib.unified_diff(base.splitlines(True), remote.splitlines(True), f"a/{rel}", f"b/{rel} (overleaf)"))))
         text, conflicted = merge(base, local, remote)
         if conflicted:
             write(p, text)
@@ -430,11 +437,11 @@ def comments(root, show_all):
         if th.get("resolved") and not show_all:
             continue
         i = len(text.encode("utf-16-le")[:2 * c["op"]["p"]].decode("utf-16-le", "ignore"))  # UTF-16 offset -> index
-        print(f"[{tid}] {rel}:{text.count(chr(10), 0, i) + 1}{'  (resolved)' if th.get('resolved') else ''}")
+        print(clean(f"[{tid}] {rel}:{text.count(chr(10), 0, i) + 1}{'  (resolved)' if th.get('resolved') else ''}"))
         print(f"  on: {unwire(c['op']['c'])[:200]!r}")
         for m in th.get("messages", []):
             who = (m.get("user") or {}).get("first_name") or (m.get("user") or {}).get("email", "?")
-            print(f"  {who}: {m.get('content', '')}")
+            print(f"  {clean(who)}: {clean(m.get('content', ''), '    ')}")
         shown += 1
     if not shown:
         print("no open comments" if not show_all else "no comments")

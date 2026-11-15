@@ -1,4 +1,4 @@
-from overlaude import CONFLICT, merge, to_op, unsafe
+from overlaude import CONFLICT, clean, merge, to_op, unsafe
 
 
 def apply(text, op):  # ShareJS semantics, BMP text
@@ -41,3 +41,9 @@ def test_unsafe_remote_paths():
         assert unsafe(bad), bad
     for good in ["main.tex", "sections/intro.tex", "figures/loss.pdf", "refs.bib", "fig. 1.png", "notes.md", "claude-notes.tex"]:
         assert not unsafe(good), good
+
+
+def test_clean_terminal_output():
+    assert clean("ok\x1b[2J\x1b]0;pwned\x07 done\u202e") == "ok[2J]0;pwned done"
+    assert clean("line1\n[deadbeef] fake", "    ") == "line1\n    [deadbeef] fake"
+    assert clean("café — naïve\ttab") == "café — naïve\ttab"
