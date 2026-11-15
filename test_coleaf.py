@@ -1,4 +1,4 @@
-from overlaude import CONFLICT, clean, merge, to_op, unsafe
+from coleaf import CONFLICT, clean, merge, to_op, unsafe
 
 
 def apply(text, op):  # ShareJS semantics, BMP text

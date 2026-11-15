@@ -1,4 +1,4 @@
-# overlaude
+# coleaf
 
 Two-way sync between a local folder and an Overleaf project, made for working on papers with Claude Code.
 
@@ -10,7 +10,7 @@ Two-way sync between a local folder and an Overleaf project, made for working on
 - **Claude uses its normal tools.** It's just a folder: Read, Edit, Grep, local scripts for plots. No MCP tool schemas taking up context.
 
 ```bash
-uv tool install overlaude        # or: pipx install overlaude / pip install overlaude
+uv tool install coleaf        # or: pipx install coleaf / pip install coleaf
 ol login                         # paste your overleaf_session2 cookie (see below)
 ol projects
 ol clone "My Paper"              # -> ./My-Paper/
@@ -41,7 +41,7 @@ ol resolve <thread-id>
 - Chrome / Edge: ⌥⌘I → Application → Cookies → `https://www.overleaf.com`.
 - Safari: enable Settings → Advanced → *Show features for web developers*, then ⌥⌘I → Storage → Cookies.
 
-Run `ol login` in a real terminal: it prompts with hidden input, so the cookie stays out of your shell history and out of Claude's transcript. The session is saved to `~/.overlaude/cookie` (mode 600). On Linux/Windows, `pip install "overlaude[browser]"` lets `ol login` read the cookie straight from your browser; on macOS, privacy protection usually blocks that.
+Run `ol login` in a real terminal: it prompts with hidden input, so the cookie stays out of your shell history and out of Claude's transcript. The session is saved to `~/.coleaf/cookie` (mode 600). On Linux/Windows, `pip install "coleaf[browser]"` lets `ol login` read the cookie straight from your browser; on macOS, privacy protection usually blocks that.
 
 **Safety:** files from Overleaf named like dotfiles or agent config (`.claude/`, `.latexmkrc`, `latexmkrc`, `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `AGENT.md`, `GEMINI.md`, matched case-insensitively) are never written locally, so a collaborator can't plant hooks or instructions that your tools would run. `ol sync` reports them as `SKIPPED`.
 
@@ -54,7 +54,7 @@ Self-hosted Overleaf: `export OVERLEAF_URL=https://overleaf.example.edu`.
 Copy the skill so Claude knows the workflow:
 
 ```bash
-mkdir -p ~/.claude/skills/overleaf && curl -fsSL https://raw.githubusercontent.com/pranavpatel08/overlaude/main/skill/SKILL.md -o ~/.claude/skills/overleaf/SKILL.md
+mkdir -p ~/.claude/skills/overleaf && curl -fsSL https://raw.githubusercontent.com/pranavpatel08/coleaf/main/skill/SKILL.md -o ~/.claude/skills/overleaf/SKILL.md
 ```
 
 Then in the project folder: *"sync, then tighten the related-work section and fix the compile errors"*.
@@ -63,7 +63,7 @@ Then in the project folder: *"sync, then tighten the related-work section and fi
 
 ## Releasing
 
-Pushing a tag like `v0.2.0` (matching `version` in `pyproject.toml`) runs the tests and publishes to PyPI through [trusted publishing](https://docs.pypi.org/trusted-publishers/), so no token is stored anywhere. One-time setup on pypi.org → the project's *Publishing* settings: owner `pranavpatel08`, repo `overlaude`, workflow `ci.yml`, environment `pypi`.
+Pushing a tag like `v0.2.0` (matching `version` in `pyproject.toml`) runs the tests and publishes to PyPI through [trusted publishing](https://docs.pypi.org/trusted-publishers/), so no token is stored anywhere. One-time setup on pypi.org → the project's *Publishing* settings: owner `pranavpatel08`, repo `coleaf`, workflow `ci.yml`, environment `pypi`.
 
 ## Limits
 

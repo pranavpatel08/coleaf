@@ -1,5 +1,5 @@
 [project]
-name = "overlaude"
+name = "coleaf"
 version = "0.2.0"
 description = "Two-way sync between a local folder and an Overleaf project, through Overleaf's live editing channel."
 readme = "README.md"
@@ -12,12 +12,13 @@ keywords = ["overleaf", "latex", "sync", "claude"]
 browser = ["browser-cookie3"]
 
 [project.scripts]
-ol = "overlaude:main"
+ol = "coleaf:main"
+coleaf = "coleaf:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project.urls]
-Homepage = "https://github.com/pranavpatel08/overlaude"
-Issues = "https://github.com/pranavpatel08/overlaude/issues"
+Homepage = "https://github.com/pranavpatel08/coleaf"
+Issues = "https://github.com/pranavpatel08/coleaf/issues"

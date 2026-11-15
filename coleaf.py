@@ -1,4 +1,4 @@
-"""overlaude: two-way sync between a local folder and an Overleaf project.
+"""coleaf: two-way sync between a local folder and an Overleaf project.
 
 Local edits go up through Overleaf's live editing channel (Socket.IO 0.9 + ShareJS ops), so
 history shows them as real edits and collaborators see them typed in. Collaborators' edits
@@ -32,7 +32,7 @@ from diff_match_patch import diff_match_patch
 from merge3 import Merge3
 
 BASE = os.environ.get("OVERLEAF_URL", "https://www.overleaf.com").rstrip("/")
-HOME = Path(os.environ.get("OVERLAUDE_HOME", Path.home() / ".overlaude"))
+HOME = Path(os.environ.get("COLEAF_HOME", Path.home() / ".coleaf"))
 COOKIE_FILE = HOME / "cookie"
 # Files that tools auto-load from the working directory; never pulled from Overleaf (compared case-insensitively).
 AGENT_FILES = {"CLAUDE.md", "CLAUDE.local.md", "AGENTS.md", "AGENT.md", "GEMINI.md", "latexmkrc"}
@@ -136,7 +136,7 @@ def session():
         die("not logged in; run `ol login`")
     name, _, value = raw.partition("=") if "=" in raw else ("overleaf_session2", "", raw)
     s = requests.Session()
-    s.headers["User-Agent"] = "Mozilla/5.0 (overlaude)"
+    s.headers["User-Agent"] = "Mozilla/5.0 (coleaf)"
     s.cookies.set(name.strip(), value.strip())
     return s
 
@@ -262,7 +262,7 @@ def find_root(start=None):
     for d in [start, *start.parents]:
         if (d / ".ol/state.json").exists():
             return d
-    die("not inside an overlaude folder; run `ol clone <project>` first")
+    die("not inside an coleaf folder; run `ol clone <project>` first")
 
 
 def load(root):

@@ -1,6 +1,6 @@
 ---
 name: overleaf
-description: Work on an Overleaf project synced to a local folder with the `ol` CLI (overlaude). Use when the working directory (or a parent) contains `.ol/state.json`, or the user mentions Overleaf, their paper's Overleaf project, or syncing with co-authors.
+description: Work on an Overleaf project synced to a local folder with the `ol` CLI (coleaf). Use when the working directory (or a parent) contains `.ol/state.json`, or the user mentions Overleaf, their paper's Overleaf project, or syncing with co-authors.
 ---
 
 # Overleaf via `ol`
