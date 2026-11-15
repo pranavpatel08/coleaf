@@ -1,6 +1,6 @@
 [project]
 name = "overlaude"
-version = "0.1.0"
+version = "0.1.1"
 description = "Two-way sync between a local folder and an Overleaf project, through Overleaf's live editing channel."
 readme = "README.md"
 license = "MIT"

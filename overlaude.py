@@ -25,11 +25,18 @@ from merge3 import Merge3
 BASE = os.environ.get("OVERLEAF_URL", "https://www.overleaf.com").rstrip("/")
 HOME = Path(os.environ.get("OVERLAUDE_HOME", Path.home() / ".overlaude"))
 COOKIE_FILE = HOME / "cookie"
+AGENT_FILES = {"CLAUDE.md", "AGENTS.md", "GEMINI.md"}
 # Never uploaded as new files (tracked remote files are always synced). Extend with .olignore.
 IGNORE = [".*", "*.aux", "*.log", "*.out", "*.toc", "*.lof", "*.lot", "*.bbl", "*.blg", "*.bcf",
           "*.run.xml", "*.fls", "*.fdb_latexmk", "*.synctex.gz", "*.nav", "*.snm", "*.pyc",
-          "__pycache__", "CLAUDE.md", "AGENTS.md", "*.orig"]
+          "__pycache__", "*.orig", *AGENT_FILES]
 CONFLICT = re.compile(r"^<<<<<<< local$", re.M)
+
+
+def unsafe(rel):
+    """Remote paths a collaborator could use to plant tool config (.claude/, .latexmkrc, ...) or escape the folder."""
+    parts = rel.split("/")
+    return "\\" in rel or any(p in ("", ".", "..") or p.startswith(".") or p in AGENT_FILES for p in parts)
 
 dmp = diff_match_patch()
 dmp.Match_Threshold = 0.0  # merge patches only onto exactly matching context, never fuzzily
@@ -250,6 +257,10 @@ def sync(root, allow_delete=False):
     docs, files, folders = tree(rt.project)
     first = not bdocs and not bfiles
     log = lambda tag, path: print(f"{tag:>9}  {path}")
+    for table in (docs, files):
+        for rel in [r for r in table if unsafe(r)]:
+            del table[rel]
+            log("SKIPPED", f"{rel} (dotfile, agent config, or unsafe path; never written locally)")
 
     def folder_id(rel):
         parent = rel.rpartition("/")[0]

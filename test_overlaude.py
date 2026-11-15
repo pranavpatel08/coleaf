@@ -1,4 +1,4 @@
-from overlaude import CONFLICT, merge, to_op
+from overlaude import CONFLICT, merge, to_op, unsafe
 
 
 def apply(text, op):  # ShareJS semantics, BMP text
@@ -31,3 +31,10 @@ def test_merge():
     text, conflicted = merge(base, base.replace("We use B.", "We use D."), base.replace("We use B.", "We use E."))
     assert conflicted and CONFLICT.search(text) and "We use D." in text and "We use E." in text
     assert merge(None, "x\n", "y\n")[1] is True  # no common ancestor -> never guess
+
+
+def test_unsafe_remote_paths():
+    for bad in [".claude/settings.json", "CLAUDE.md", "sub/AGENTS.md", ".latexmkrc", "../x.tex", "a/../../x", "/etc/x", "a\\b", ".git/hooks/post-checkout"]:
+        assert unsafe(bad), bad
+    for good in ["main.tex", "sections/intro.tex", "figures/loss.pdf", "refs.bib"]:
+        assert not unsafe(good), good

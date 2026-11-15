@@ -33,6 +33,8 @@ ol compile                       # compiles on Overleaf; PDF + log land in .ol/
 
 Run `ol login` in a real terminal: it prompts with hidden input, so the cookie stays out of your shell history and out of Claude's transcript. The session is saved to `~/.overlaude/cookie` (mode 600). On Linux/Windows, `pip install "overlaude[browser]"` lets `ol login` read the cookie straight from your browser; on macOS, privacy protection usually blocks that.
 
+**Safety:** files from Overleaf named like dotfiles or agent config (`.claude/`, `.latexmkrc`, `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`) are never written locally, so a collaborator can't plant hooks or instructions that your tools would run. `ol sync` reports them as `SKIPPED`.
+
 Never uploaded: dotfiles, LaTeX build files (`*.aux`, `*.log`, `*.bbl`, ...), `CLAUDE.md`. Add patterns to `.olignore`. Sync state lives in `.ol/`.
 
 Self-hosted Overleaf: `export OVERLEAF_URL=https://overleaf.example.edu`.
