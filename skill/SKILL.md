@@ -17,4 +17,6 @@ The folder is a live two-way mirror of an Overleaf project. Edit files with your
 8. **Suggestions:** when the user wants co-authors to review your edits, or says "suggest", use `ol sync --suggest` so edits arrive as tracked changes.
 9. **Comments:** `ol comments` lists open threads (`[thread-id] file:line`, the text they're on, and the messages). To address them: sync, make the edit, `ol sync`, then `ol reply <id> "<what changed>"` and `ol resolve <id>`. Only resolve threads you actually addressed. To flag something for co-authors: `ol comment <file> "<exact unique text>" "<message>"`.
 
+If auto-sync is on (`ol autosync on`), every edit is synced for you and the sync report arrives as hook context; still run `ol sync` before you start reading, since the hook only fires after edits.
+
 Never edit `.ol/`. If `ol` says the session expired, ask the user to run `! ol login`.

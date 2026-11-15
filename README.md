@@ -59,6 +59,8 @@ mkdir -p ~/.claude/skills/overleaf && curl -fsSL https://raw.githubusercontent.c
 
 Then in the project folder: *"sync, then tighten the related-work section and fix the compile errors"*.
 
+**Optional auto-sync.** Syncing is manual by default. In a paper folder, `ol autosync on` adds a Claude Code hook (in that folder's `.claude/settings.json`, which is never uploaded) that runs `ol sync` right after each edit Claude makes, about 2 seconds, and tells Claude about any co-author changes or conflicts it finds. Nothing runs in the background between edits. `ol autosync on --suggest` makes those edits tracked changes; `ol autosync off` removes the hook. Concurrent syncs in one folder are serialized, so parallel edits can't double-push.
+
 ## Releasing
 
 Pushing a tag like `v0.2.0` (matching `version` in `pyproject.toml`) runs the tests and publishes to PyPI through [trusted publishing](https://docs.pypi.org/trusted-publishers/), so no token is stored anywhere. One-time setup on pypi.org → the project's *Publishing* settings: owner `pranavpatel08`, repo `overlaude`, workflow `ci.yml`, environment `pypi`.

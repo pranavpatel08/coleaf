@@ -6,16 +6,24 @@ are 3-way merged into the local files.
 """
 
 import argparse
+import contextlib
 import difflib
 import getpass
 import hashlib
+import io
 import json
 import os
 import re
+import shlex
 import sys
 import time
 import unicodedata
 from fnmatch import fnmatch
+
+try:
+    import fcntl
+except ImportError:  # Windows: no lock; don't run two syncs at once there
+    fcntl = None
 from pathlib import Path
 
 import requests
@@ -249,8 +257,9 @@ def tree(project):
 
 
 # -- sync ---------------------------------------------------------------------
-def find_root():
-    for d in [Path.cwd(), *Path.cwd().parents]:
+def find_root(start=None):
+    start = Path(start or Path.cwd()).resolve()
+    for d in [start, *start.parents]:
         if (d / ".ol/state.json").exists():
             return d
     die("not inside an overlaude folder; run `ol clone <project>` first")
@@ -294,7 +303,10 @@ def connect(pid):
 
 
 def sync(root, allow_delete=False, suggest=False):
-    st = load(root)
+    lock = open(root / ".ol/lock", "w")  # one sync per folder at a time (hooks can fire concurrently)
+    if fcntl:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+    st = load(root)  # read under the lock, so a waiting sync sees the previous one's result
     pid, bdocs, bfiles = st["project"], st["docs"], st["files"]
     s, rt = connect(pid)
     if suggest and not rt.project.get("features", {}).get("trackChanges"):
@@ -305,7 +317,9 @@ def sync(root, allow_delete=False, suggest=False):
     for table in (docs, files):
         for rel in [r for r in table if unsafe(r) or not (root / r).resolve().is_relative_to(root.resolve())]:
             del table[rel]
-            log("SKIPPED", f"{rel} (dotfile, agent config, or unsafe path; never written locally)")
+            if rel not in st.setdefault("skipped", []):  # warn once, not on every sync
+                st["skipped"].append(rel)
+                log("SKIPPED", f"{rel} (dotfile, agent config, or unsafe path; never written locally)")
 
     def folder_id(rel):
         parent = rel.rpartition("/")[0]
@@ -415,6 +429,50 @@ def sync(root, allow_delete=False, suggest=False):
 
     save(root, st)
     rt.ws.close()
+
+
+# -- auto-sync (Claude Code hook) -------------------------------------------------
+HOOK_MARK = "-m overlaude sync --hook"
+
+
+def hook(suggest):
+    """PostToolUse hook: sync the ol folder holding the file Claude just edited; tell Claude what happened."""
+    path = (json.load(sys.stdin).get("tool_input") or {}).get("file_path")
+    root = next((d for d in Path(path).resolve().parents if (d / ".ol/state.json").exists()), None) if path else None
+    if not root or Path(path).resolve().relative_to(root).parts[0] == ".ol":
+        return
+    out = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(out):
+            sync(root, suggest=suggest)
+    except SystemExit as e:
+        out.write(f"\n{e}")
+    except Exception as e:  # network etc.: report to Claude instead of failing silently
+        out.write(f"\nol sync failed: {e!r}")
+    if out.getvalue().strip():
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse",
+                                                 "additionalContext": "ol auto-sync:\n" + out.getvalue()}}))
+
+
+def autosync(root, on, suggest):
+    """Add/remove the hook in this folder's .claude/settings.json (never synced to Overleaf)."""
+    f = root / ".claude/settings.json"
+    cfg = json.loads(f.read_text()) if f.exists() else {}
+    hooks = cfg.setdefault("hooks", {})
+    post = [h for h in hooks.get("PostToolUse", []) if HOOK_MARK not in json.dumps(h)]
+    if on:
+        cmd = f"{shlex.quote(sys.executable)} {HOOK_MARK}" + (" --suggest" if suggest else "")
+        post.append({"matcher": "Edit|Write|MultiEdit", "hooks": [{"type": "command", "command": cmd, "timeout": 120}]})
+    if post:
+        hooks["PostToolUse"] = post
+    else:
+        hooks.pop("PostToolUse", None)
+        if not hooks:
+            cfg.pop("hooks")
+    f.parent.mkdir(exist_ok=True)
+    f.write_text(json.dumps(cfg, indent=2) + "\n")
+    print(f"auto-sync {'on' + (' (as suggestions)' if suggest else '') if on else 'off'} for {root}"
+          + ("; takes effect in Claude Code sessions started in this folder (approve it in /hooks if asked)" if on else ""))
 
 
 # -- comments ------------------------------------------------------------------
@@ -530,6 +588,10 @@ def main():
     sy = sub.add_parser("sync", help="merge local and Overleaf changes both ways")
     sy.add_argument("--delete", action="store_true", help="also delete files on Overleaf that you deleted locally")
     sy.add_argument("--suggest", action="store_true", help="push your edits as tracked changes for collaborators to accept or reject")
+    sy.add_argument("--hook", action="store_true", help=argparse.SUPPRESS)
+    au = sub.add_parser("autosync", help="sync automatically after each Claude Code edit in this folder")
+    au.add_argument("state", choices=["on", "off"])
+    au.add_argument("--suggest", action="store_true", help="auto-synced edits arrive as tracked changes")
     sub.add_parser("comments", help="list open comments").add_argument("--all", action="store_true", help="include resolved ones")
     cm = sub.add_parser("comment", help="comment on a piece of text")
     cm.add_argument("file")
@@ -557,8 +619,12 @@ def main():
         save(root, {"project": pid, "docs": {}, "files": {}})
         sync(root)
         print(f"cloned into {root}/")
+    elif a.cmd == "sync" and a.hook:
+        hook(a.suggest)
     elif a.cmd == "sync":
         sync(find_root(), a.delete, a.suggest)
+    elif a.cmd == "autosync":
+        autosync(find_root(), a.state == "on", a.suggest)
     elif a.cmd == "comments":
         comments(find_root(), a.all)
     elif a.cmd == "comment":
